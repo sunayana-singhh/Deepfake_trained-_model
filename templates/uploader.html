@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VERITASAI | Uploader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --background: #1C1C1C;
+            --dark-gray: #525252;
+            --light-gray: #A1A1A1;
+            --accent-red: #8C2A2A;
+            --text-color: #F3F3E9;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background);
+            color: var(--text-color);
+            overflow-x: hidden;
+        }
+        #bg-canvas {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -2;
+        }
+        main, header, footer {
+            position: relative;
+            z-index: 1;
+        }
+        .btn-login {
+            @apply bg-[var(--accent-red)] hover:bg-[#7a2525] text-[var(--text-color)] font-bold rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg shadow-black/30;
+        }
+        .btn-secondary {
+            @apply bg-transparent hover:bg-[var(--dark-gray)]/50 text-[var(--light-gray)] font-bold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 border-2 border-[var(--dark-gray)];
+        }
+        .glass-card {
+            background: rgba(82, 82, 82, 0.2);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(161, 161, 161, 0.1);
+            border-radius: 1rem;
+        }
+        #drop-zone {
+            border: 2px dashed rgba(161, 161, 161, 0.3);
+            transition: border-color 0.3s, background-color 0.3s;
+        }
+        #drop-zone.drag-over {
+            border-color: var(--light-gray);
+            background-color: rgba(161, 161, 161, 0.05);
+        }
+        #result-container {
+            transform: scale(0.8);
+            opacity: 0;
+            transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55), opacity 0.5s ease;
+        }
+        #result-container.show {
+            transform: scale(1);
+            opacity: 1;
+        }
+        .result-real { @apply text-green-400 border-green-400; }
+        .result-fake { @apply text-red-400 border-red-400; }
+        .text-accent { color: var(--accent-red); }
+        #progress-bar-container { background-color: rgba(255, 255, 255, 0.1); border-radius: 9999px; overflow: hidden; }
+        #progress-bar { width: 0%; height: 100%; background-color: var(--light-gray); transition: width 2.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        #image-preview { max-height: 200px; border-radius: 0.5rem; object-fit: contain; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <canvas id="bg-canvas"></canvas>
+
+    <header class="fixed top-0 left-0 right-0 z-50 bg-opacity-30 backdrop-blur-md border-b border-[var(--dark-gray)]/50">
+        <div class="container mx-auto px-6 py-4 grid grid-cols-3 items-center">
+            <div></div>
+            <a href="index.html" class="text-7xl font-bold tracking-wider text-white text-center">
+                <span class="text-accent">VERITAS</span>AI
+            </a>
+            <a href="#" class="btn-login text-sm py-2 px-4 justify-self-end">
+                Login / Signup
+            </a>
+        </div>
+    </header>
+
+    <main class="min-h-screen flex items-center justify-center pt-32 pb-12">
+        <section class="w-full">
+            <div class="container mx-auto px-6">
+                <div class="max-w-2xl mx-auto glass-card p-8">
+                     <div class="text-center mb-8">
+                        <h3 class="text-5xl md:text-6xl font-bold text-white">Unmask the Truth</h3>
+                        <p class="text-[var(--light-gray)]/80 mt-4 text-lg">
+                            Upload a video or image to see the detection model in action.
+                        </p>
+                    </div>
+                    
+                    <div id="uploader-view">
+                        <div id="drop-zone" class="rounded-lg p-10 text-center cursor-pointer">
+                            <input type="file" id="file-input" class="hidden" accept="video/*,image/*">
+                            <svg class="w-16 h-16 mx-auto text-[var(--light-gray)] mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-4-4V7a4 4 0 014-4h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V16a4 4 0 01-4 4H7z"></path></svg>
+                            <p class="text-white"><span class="font-semibold">Click to upload</span> or drag and drop</p>
+                            <p class="text-xs text-gray-500 mt-1">Maximum file size: 50MB</p>
+                        </div>
+                    </div>
+
+                    <div id="analysis-view" class="hidden text-center">
+                        <div id="preview-container" class="mb-4"><img id="image-preview" src="" alt="File preview" class="mx-auto"></div>
+                        <p id="file-info" class="text-gray-400 mb-4"></p>
+                        <div id="progress-container" class="w-full">
+                             <p class="text-gray-300 mb-2">Analyzing...</p>
+                             <div id="progress-bar-container" class="h-2 w-full"><div id="progress-bar"></div></div>
+                        </div>
+                        <div id="result-container" class="hidden mt-6">
+                             <p class="text-lg font-medium mb-2">Analysis Complete</p>
+                             <div id="result-box" class="text-4xl font-bold p-6 border-2 rounded-lg inline-block"><span id="result-text"></span></div>
+                             <p class="mt-4 text-gray-400">Confidence: <span id="confidence-score"></span>%</p>
+                        </div>
+                        <button id="reset-button" class="w-full mt-6 btn-secondary hidden">Analyze Another File</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const uploaderView = document.getElementById('uploader-view');
+        const analysisView = document.getElementById('analysis-view');
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const imagePreview = document.getElementById('image-preview');
+        const fileInfo = document.getElementById('file-info');
+        const progressBar = document.getElementById('progress-bar');
+        const progressContainer = document.getElementById('progress-container');
+        const resultContainer = document.getElementById('result-container');
+        const resultBox = document.getElementById('result-box');
+        const resultText = document.getElementById('result-text');
+        const confidenceScore = document.getElementById('confidence-score');
+        const resetButton = document.getElementById('reset-button');
+        const errorContainer = document.createElement('div');
+        errorContainer.className = 'fixed top-5 right-5 bg-red-500 text-white p-4 rounded-lg shadow-lg z-50 hidden';
+        document.body.appendChild(errorContainer);
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+        resetButton.addEventListener('click', resetDemo);
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
+
+        function showError(message) {
+            errorContainer.textContent = message;
+            errorContainer.classList.remove('hidden');
+            setTimeout(() => errorContainer.classList.add('hidden'), 5000);
+        }
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            const file = files[0];
+            if (file.size > 50 * 1024 * 1024) { showError('File is too large (max 50MB).'); return; }
+
+            uploaderView.classList.add('hidden');
+            analysisView.classList.remove('hidden');
+            fileInfo.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => { imagePreview.src = e.target.result; imagePreview.classList.remove('hidden'); };
+                reader.readAsDataURL(file);
+            } else { imagePreview.classList.add('hidden'); }
+            
+            startAnalysis(file);
+        }
+
+        function startAnalysis(file) {
+            progressContainer.classList.remove('hidden');
+            resultContainer.classList.add('hidden');
+            resultContainer.classList.remove('show');
+            resetButton.classList.add('hidden');
+            progressBar.style.width = '0%';
+            setTimeout(() => { progressBar.style.width = '100%'; }, 100);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // *** THIS IS THE FIX: Changed address from 127.0.0.1 to localhost ***
+            fetch('http://localhost:5001/predict', { method: 'POST', body: formData })
+                .then(response => {
+                    if (!response.ok) { throw new Error(`Server error: ${response.statusText}`); }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.error) { throw new Error(data.error); }
+                    showResults(data.result, data.confidence);
+                })
+                .catch(error => {
+                    console.error('Fetch Error:', error);
+                    showError(`Analysis failed: ${error.message}. Is the backend server running?`);
+                    resetDemo();
+                });
+        }
+        
+        function showResults(result, confidence) {
+            progressContainer.classList.add('hidden');
+            resultText.textContent = result;
+            confidenceScore.textContent = confidence.toFixed(2);
+            resultBox.className = 'text-4xl font-bold p-6 border-2 rounded-lg inline-block';
+            resultBox.classList.add(result === 'DEEPFAKE' ? 'result-fake' : 'result-real');
+            resultContainer.classList.remove('hidden');
+            setTimeout(() => resultContainer.classList.add('show'), 50);
+            resetButton.classList.remove('hidden');
+        }
+        
+        function resetDemo() {
+            uploaderView.classList.remove('hidden');
+            analysisView.classList.add('hidden');
+            fileInput.value = ''; 
+            progressBar.style.width = '0%';
+            resultContainer.classList.add('hidden');
+            resultContainer.classList.remove('show');
+            resetButton.classList.add('hidden');
+        }
+
+        // --- 3D Background ---
+        let scene, camera, renderer, mask, particles;
+        function init3D(){
+            const canvas=document.getElementById('bg-canvas');
+            scene=new THREE.Scene();
+            camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
+            camera.position.z=5;
+            renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true});
+            renderer.setSize(window.innerWidth,window.innerHeight);
+            const ambientLight=new THREE.AmbientLight(0xffffff,0.6);
+            scene.add(ambientLight);
+            const directionalLight=new THREE.DirectionalLight(0xffffff,1.0);
+            directionalLight.position.set(5,5,5);
+            scene.add(directionalLight);
+            const geometry=new THREE.BufferGeometry();
+            const vertices=new Float32Array([-1.5,1.8,0,1.5,1.8,0,0,0.8,0.5,-1.6,0.5,0.2,1.6,0.5,0.2,-0.8,-2,0.5,0.8,-2,0.5,-1.8,-0.4,0.6,1.8,-0.4,0.6,0,-0.8,0.8,0,-1.2,0.8,-0.3,-2.2,0.6,0.3,-2.2,0.6]);
+            const indices=[0,2,3,1,4,2,3,2,4,3,5,9,4,9,6,3,9,5,4,6,9,7,3,9,8,4,9,7,9,8,10,5,6,11,5,10,12,6,10];
+            geometry.setIndex(indices);
+            geometry.setAttribute('position',new THREE.BufferAttribute(vertices,3));
+            geometry.computeVertexNormals();
+            const material=new THREE.MeshStandardMaterial({color:0xA1A1A1,emissive:0x8C2A2A,emissiveIntensity:0.5,wireframe:true,roughness:0.5,metalness:0.2});
+            mask=new THREE.Mesh(geometry,material);
+            mask.scale.set(1.2,1.2,1.2);
+            scene.add(mask);
+            const particlesGeometry=new THREE.BufferGeometry();
+            const particlesCount=5000;
+            const posArray=new Float32Array(particlesCount*3);
+            for(let i=0;i<particlesCount*3;i++){posArray[i]=(Math.random()-0.5)*20;}
+            particlesGeometry.setAttribute('position',new THREE.BufferAttribute(posArray,3));
+            const particlesMaterial=new THREE.PointsMaterial({size:0.015,color:0x525252});
+            particles=new THREE.Points(particlesGeometry,particlesMaterial);
+            scene.add(particles);
+            window.addEventListener('resize',onWindowResize,false);
+            animate();
+        }
+        let mouseX=0,mouseY=0;
+        document.addEventListener('mousemove',(event)=>{mouseX=(event.clientX/window.innerWidth)*2-1;mouseY=-(event.clientY/window.innerHeight)*2+1;});
+        function animate(){requestAnimationFrame(animate);if(mask){mask.rotation.y+=0.0005;mask.rotation.x+=(mouseY*0.5-mask.rotation.x)*0.02;mask.rotation.y+=(mouseX*0.5-mask.rotation.y)*0.02;}
+        if(particles){particles.rotation.y+=0.0002;}
+        renderer.render(scene,camera);}
+        function onWindowResize(){camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);}
+        init3D();
+    </script>
+</body>
+</html>
+
