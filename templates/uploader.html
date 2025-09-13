@@ -78,7 +78,7 @@
     <header class="fixed top-0 left-0 right-0 z-50 bg-opacity-30 backdrop-blur-md border-b border-[var(--dark-gray)]/50">
         <div class="container mx-auto px-6 py-4 grid grid-cols-3 items-center">
             <div></div>
-            <a href="index.html" class="text-7xl font-bold tracking-wider text-white text-center">
+            <a href="/" class="text-7xl font-bold tracking-wider text-white text-center">
                 <span class="text-accent">VERITAS</span>AI
             </a>
             <a href="#" class="btn-login text-sm py-2 px-4 justify-self-end">
@@ -103,7 +103,8 @@
                             <input type="file" id="file-input" class="hidden" accept="video/*,image/*">
                             <svg class="w-16 h-16 mx-auto text-[var(--light-gray)] mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-4-4V7a4 4 0 014-4h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V16a4 4 0 01-4 4H7z"></path></svg>
                             <p class="text-white"><span class="font-semibold">Click to upload</span> or drag and drop</p>
-                            <p class="text-xs text-gray-500 mt-1">Maximum file size: 50MB</p>
+                            <p class="text-xs text-gray-500 mt-1">Images (JPG, PNG) or Videos (MP4, MOV, AVI)</p>
+                            <p class="text-xs text-gray-500">Maximum file size: 50MB</p>
                         </div>
                     </div>
 
@@ -118,6 +119,10 @@
                              <p class="text-lg font-medium mb-2">Analysis Complete</p>
                              <div id="result-box" class="text-4xl font-bold p-6 border-2 rounded-lg inline-block"><span id="result-text"></span></div>
                              <p class="mt-4 text-gray-400">Confidence: <span id="confidence-score"></span>%</p>
+                             <div id="video-details" class="hidden mt-4 text-sm text-gray-400">
+                                 <p>Frames analyzed: <span id="frames-analyzed"></span></p>
+                                 <p>Fake frames detected: <span id="fake-frames"></span></p>
+                             </div>
                         </div>
                         <button id="reset-button" class="w-full mt-6 btn-secondary hidden">Analyze Another File</button>
                     </div>
@@ -164,13 +169,25 @@
 
             uploaderView.classList.add('hidden');
             analysisView.classList.remove('hidden');
-            fileInfo.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
-
-            if (file.type.startsWith('image/')) {
+            
+            const isVideo = file.type.startsWith('video/') || file.name.toLowerCase().match(/\.(mp4|avi|mov|mkv|webm|flv|wmv)$/);
+            const isImage = file.type.startsWith('image/') || file.name.toLowerCase().match(/\.(jpg|jpeg|png|bmp|gif|tiff|webp)$/);
+            
+            if (isVideo) {
+                fileInfo.textContent = `Video: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                imagePreview.classList.add('hidden');
+                document.querySelector('#progress-container p').textContent = 'Analyzing video frames... This may take a moment.';
+            } else if (isImage) {
+                fileInfo.textContent = `Image: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
                 const reader = new FileReader();
                 reader.onload = (e) => { imagePreview.src = e.target.result; imagePreview.classList.remove('hidden'); };
                 reader.readAsDataURL(file);
-            } else { imagePreview.classList.add('hidden'); }
+                document.querySelector('#progress-container p').textContent = 'Analyzing...';
+            } else {
+                showError('Unsupported file type. Please upload an image or video.');
+                resetDemo();
+                return;
+            }
             
             startAnalysis(file);
         }
@@ -181,12 +198,16 @@
             resultContainer.classList.remove('show');
             resetButton.classList.add('hidden');
             progressBar.style.width = '0%';
-            setTimeout(() => { progressBar.style.width = '100%'; }, 100);
+            
+            const isVideo = file.type.startsWith('video/') || file.name.toLowerCase().match(/\.(mp4|avi|mov|mkv|webm|flv|wmv)$/);
+            
+            // Adjust progress bar speed based on file type
+            const progressDuration = isVideo ? 8000 : 2500; // Videos take longer
+            setTimeout(() => { progressBar.style.width = '100%'; progressBar.style.transition = `width ${progressDuration}ms cubic-bezier(0.4, 0, 0.2, 1)`; }, 100);
 
             const formData = new FormData();
             formData.append('file', file);
 
-            // *** THIS IS THE FIX: Changed address from 127.0.0.1 to localhost ***
             fetch('http://localhost:5001/predict', { method: 'POST', body: formData })
                 .then(response => {
                     if (!response.ok) { throw new Error(`Server error: ${response.statusText}`); }
@@ -194,7 +215,7 @@
                 })
                 .then(data => {
                     if (data.error) { throw new Error(data.error); }
-                    showResults(data.result, data.confidence);
+                    showResults(data);
                 })
                 .catch(error => {
                     console.error('Fetch Error:', error);
@@ -203,12 +224,28 @@
                 });
         }
         
-        function showResults(result, confidence) {
+        function showResults(data) {
             progressContainer.classList.add('hidden');
+            
+            // Handle both video and image result formats
+            const result = data.result;
+            const confidence = data.confidence;
+            
             resultText.textContent = result;
             confidenceScore.textContent = confidence.toFixed(2);
             resultBox.className = 'text-4xl font-bold p-6 border-2 rounded-lg inline-block';
             resultBox.classList.add(result === 'DEEPFAKE' ? 'result-fake' : 'result-real');
+            
+            // Show video-specific details if available
+            const videoDetails = document.getElementById('video-details');
+            if (data.frames_analyzed !== undefined) {
+                document.getElementById('frames-analyzed').textContent = data.frames_analyzed;
+                document.getElementById('fake-frames').textContent = data.fake_frames;
+                videoDetails.classList.remove('hidden');
+            } else {
+                videoDetails.classList.add('hidden');
+            }
+            
             resultContainer.classList.remove('hidden');
             setTimeout(() => resultContainer.classList.add('show'), 50);
             resetButton.classList.remove('hidden');
@@ -219,9 +256,12 @@
             analysisView.classList.add('hidden');
             fileInput.value = ''; 
             progressBar.style.width = '0%';
+            progressBar.style.transition = 'width 2.5s cubic-bezier(0.4, 0, 0.2, 1)'; // Reset to default
             resultContainer.classList.add('hidden');
             resultContainer.classList.remove('show');
+            document.getElementById('video-details').classList.add('hidden');
             resetButton.classList.add('hidden');
+            document.querySelector('#progress-container p').textContent = 'Analyzing...'; // Reset progress text
         }
 
         // --- 3D Background ---
